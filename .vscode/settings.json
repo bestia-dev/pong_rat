@@ -1,0 +1,58 @@
+{
+    "workbench.colorCustomizations": {
+        "titleBar.activeForeground": "#fff",
+        "titleBar.inactiveForeground": "#ffffffcc",
+        "titleBar.activeBackground": "#404040",
+        "titleBar.inactiveBackground": "#2d2d2dcc"
+    },
+    "spellright.language": [
+        "en"
+    ],
+    "spellright.documentTypes": [
+        "markdown",
+        "latex",
+        "plaintext"
+    ],
+    "files.associations": {
+        "LICENSE": "plain text"
+    },
+    "rust-analyzer.showUnlinkedFileNotification": false,
+    "cSpell.words": [
+        "Alla",
+        "alloc",
+        "appender",
+        "bestia",
+        "bestiadev",
+        "camino",
+        "chrono",
+        "commitish",
+        "crossterm",
+        "CRUSTDE",
+        "czvf",
+        "Decryptor",
+        "Encryptor",
+        "ende",
+        "endregion",
+        "keygen",
+        "lizs",
+        "Nazdravlje",
+        "passcode",
+        "plantuml",
+        "Prost",
+        "ratatui",
+        "reqwest",
+        "rustc",
+        "rustdevuser",
+        "rustlang",
+        "rustprojects",
+        "serde",
+        "sshadd",
+        "struct",
+        "subsecond",
+        "substack",
+        "thiserror",
+        "zcvf",
+        "zdravje",
+        "Zeroize"
+    ]
+}

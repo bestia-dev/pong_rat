@@ -1,0 +1,1 @@
+searchState.loadedDescShard("pong_rat", 0, "src/bin/pong_rat/main.rs\nApplication state\nRatatui app is a loop with 2 functions: draw and react …\nReturns the argument unchanged.\nReturns the argument unchanged.\nCalls <code>U::from(self)</code>.\nCalls <code>U::from(self)</code>.")

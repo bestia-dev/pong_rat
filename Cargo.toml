@@ -1,0 +1,33 @@
+[package]
+name = "pong_rat"
+# binary executable does not need to be SemVer, because nobody depends on it
+version = "0.0.41"
+description = "A simple Pong game with Ratatui"
+authors = ["bestia.dev"]
+homepage = "https://bestia.dev"
+edition = "2024"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/bestia-dev/pong_rat"
+# Keyword must be only one word: lowercase letters, hyphens(-) or numbers, less then 35 characters, at most 5 keywords per crate
+keywords = ["maintained", "work-in-progress", "rustlang"]
+# allowed categories are listed here <https://crates.io/category_slugs>
+categories = ["command-line-interface"]
+# publish as a cargo tool. Only this files.
+publish = false
+include = [
+    "Cargo.toml",
+    "LICENSE",
+    "README.md",
+    "src/*"
+]
+
+[dependencies]
+log = "0.4.26"
+pretty_env_logger="0.5.0"
+thiserror = "2.0.12"
+anyhow="1.0.97"
+crossterm = "0.29.0"
+ratatui = "0.29.0"
+color-eyre="0.6.5"
+rand="0.9.1"
