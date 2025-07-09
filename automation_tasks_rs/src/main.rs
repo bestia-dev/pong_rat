@@ -252,7 +252,7 @@ fn task_commit_and_push(arg_2: Option<String>) {
     println!(
         r#"
   {YELLOW}After `cargo auto commit_and_push "message"`{RESET}
-  {YELLOW}Next, create the GitHub Release {tag_name_version}.{RESET}
+  {YELLOW}Next, create the GitHub Release.{RESET}
 {GREEN}cargo auto github_new_release{RESET}
 "#
     );

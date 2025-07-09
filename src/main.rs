@@ -1,5 +1,7 @@
 //! src/bin/pong_rat/main.rs
 
+use std::time::{Duration, Instant};
+
 use color_eyre::Result;
 
 use ratatui::{
@@ -23,24 +25,57 @@ fn main() -> Result<()> {
 struct App {
     paddle_1: Vec<(usize, usize)>,
     paddle_2: Vec<(usize, usize)>,
-    ball_pos: (usize, usize),
-    ball_direction: (i32, i32),
+    ball_real_pos: (f32, f32),
+    ball_direction: (f32, f32),
     dead: bool,
+    // last_move is used to spin the ball to change the direction
+    paddle_1_last_move: (Direction, Instant),
+    paddle_2_last_move: (Direction, Instant),
+    last_move_ball: std::time::Instant,
 }
 
 /// Initial app state
 impl Default for App {
     fn default() -> Self {
-        let paddle_1 = vec![(0, 9), (0, 10), (0, 11)];
-        let paddle_2 = vec![(19, 9), (19, 10), (19, 11)];
-        let ball_pos = (12, 12);
-        let ball_direction = (1, 1);
+        let paddle_1 = vec![
+            (0, 4),
+            (0, 5),
+            (0, 6),
+            (0, 7),
+            (0, 8),
+            (0, 9),
+            (0, 10),
+            (0, 11),
+            (0, 12),
+            (0, 13),
+            (0, 14),
+            (0, 15),
+        ];
+        let paddle_2 = vec![
+            (19, 4),
+            (19, 5),
+            (19, 6),
+            (19, 7),
+            (19, 8),
+            (19, 9),
+            (19, 10),
+            (19, 11),
+            (19, 12),
+            (19, 13),
+            (19, 14),
+            (19, 15),
+        ];
+        let ball_real_pos = (5.0, 12.0);
+        let ball_direction = (1.0, 1.0);
         App {
             paddle_1,
             paddle_2,
-            ball_pos,
+            ball_real_pos,
             ball_direction,
             dead: false,
+            paddle_1_last_move: (Direction::Up, std::time::Instant::now()),
+            paddle_2_last_move: (Direction::Up, std::time::Instant::now()),
+            last_move_ball: std::time::Instant::now(),
         }
     }
 }
@@ -50,13 +85,18 @@ pub enum Direction {
     Down,
 }
 
+pub enum Player {
+    One,
+    Two,
+}
+
 impl App {
     /// Ratatui app is a loop with 2 functions: draw and react events
     fn app_loop(mut self, mut terminal: DefaultTerminal) -> Result<()> {
         loop {
             terminal.draw(|frame| self.draw(frame))?;
 
-            if poll(std::time::Duration::from_millis(200))? {
+            if poll(std::time::Duration::from_millis(0))? {
                 // It's guaranteed that `read` won't block, because `poll` returned
                 // `Ok(true)`.
                 // react on events
@@ -68,18 +108,20 @@ impl App {
 
                             KeyCode::Char('n') => self.restart_game(),
 
-                            KeyCode::Char('w') => self.move_paddles(Direction::Up),
-                            KeyCode::Char('s') => self.move_paddles(Direction::Down),
+                            KeyCode::Char('w') => self.move_paddle(Direction::Up, Player::One),
+                            KeyCode::Char('s') => self.move_paddle(Direction::Down, Player::One),
+
+                            KeyCode::Char('i') => self.move_paddle(Direction::Up, Player::Two),
+                            KeyCode::Char('k') => self.move_paddle(Direction::Down, Player::Two),
 
                             _ => {}
                         }
                     }
+                    self.move_ball();
                 }
             } else {
                 // Timeout expired, no `Event` is available
-                if !self.dead {
-                    self.move_ball();
-                }
+                self.move_ball();
             }
         }
     }
@@ -94,15 +136,16 @@ impl App {
             Constraint::Length(22),
             Constraint::Length(1),
             Constraint::Length(1),
+            Constraint::Length(1),
             Constraint::Fill(1),
         ]);
-        let [game_area, instructions_area, dead_area, _extra_vertical_ares] = vertical.areas(content_area);
-
+        let [game_area, instructions_area, dead_area, debug_area, _extra_vertical_ares] = vertical.areas(content_area);
+        let ball_pos = (self.ball_real_pos.0.round() as usize, self.ball_real_pos.1.round() as usize);
         let mut text = Text::default();
         for y in 0..20 {
             let mut line = Line::default();
             for x in 0..20 {
-                if (x, y) == self.ball_pos {
+                if (x, y) == ball_pos {
                     line.push_span("bal");
                 } else if self.paddle_1.contains(&(x, y)) {
                     line.push_span("111");
@@ -121,10 +164,10 @@ impl App {
         let horizontal_instructions = Layout::horizontal([Constraint::Ratio(1, 3), Constraint::Ratio(1, 3), Constraint::Ratio(1, 3)]);
         let [time_area, points_area, exit_area] = horizontal_instructions.areas(instructions_area);
 
-        let paragraph = Paragraph::new("S-down, W-up");
+        let paragraph = Paragraph::new("W-up, S-down");
         frame.render_widget(paragraph, time_area);
 
-        let paragraph = Paragraph::new("points:");
+        let paragraph = Paragraph::new("I-up, K-down");
         frame.render_widget(paragraph, points_area);
 
         let paragraph = Paragraph::new("Press Q to quit");
@@ -134,78 +177,114 @@ impl App {
             let paragraph = Paragraph::new("The ball is out! Press N to restart.");
             frame.render_widget(paragraph, dead_area);
         }
+
+        let paragraph = Paragraph::new(format!("direction: {}  {}", self.ball_direction.0, self.ball_direction.1));
+        frame.render_widget(paragraph, debug_area);
     }
 
-    fn move_paddles(&mut self, direction: Direction) {}
+    fn move_paddle(&mut self, direction: Direction, player: Player) {
+        let paddle = match &player {
+            Player::One => &mut self.paddle_1,
+            Player::Two => &mut self.paddle_2,
+        };
+        let paddle_last_move = match player {
+            Player::One => &mut self.paddle_1_last_move,
+            Player::Two => &mut self.paddle_2_last_move,
+        };
+        match direction {
+            Direction::Down => {
+                if paddle[2].1 < 19 {
+                    for i in 0..paddle.len() {
+                        paddle[i].1 += 1;
+                    }
+                    paddle_last_move.0 = Direction::Down;
+                    paddle_last_move.1 = std::time::Instant::now();
+                }
+            }
+            Direction::Up => {
+                if paddle[0].1 > 0 {
+                    for i in 0..paddle.len() {
+                        paddle[i].1 -= 1;
+                    }
+                    paddle_last_move.0 = Direction::Up;
+                    paddle_last_move.1 = std::time::Instant::now();
+                }
+            }
+        }
+    }
 
     fn move_ball(&mut self) {
-        /*         if !self.dead {
-            self.timer += 1;
-            self.last_direction = direction;
+        if !self.dead {
+            // move ball every 300 millis
+            let now = std::time::Instant::now();
+            if now.duration_since(self.last_move_ball) > Duration::from_millis(300) {
+                self.last_move_ball = now;
 
-            let (mut nx, mut ny) = self.snake_vec[0];
-            // dead if out of border
-            match self.last_direction {
-                Direction::Up => {
-                    if ny == 0 {
-                        self.dead = true;
-                    } else {
-                        ny -= 1;
-                    }
+                self.ball_real_pos.0 += self.ball_direction.0;
+                self.ball_real_pos.1 += self.ball_direction.1;
+                let ball_pos = (self.ball_real_pos.0.round() as usize, self.ball_real_pos.1.round() as usize);
+
+                // bottom and top have the same bounce angle
+                if ball_pos.1 == 19 {
+                    self.ball_direction.1 *= -1.0;
                 }
-                Direction::Down => {
-                    if ny == 19 {
-                        self.dead = true;
-                    } else {
-                        ny += 1;
-                    }
-                }
-                Direction::Left => {
-                    if nx == 0 {
-                        self.dead = true;
-                    } else {
-                        nx -= 1;
-                    }
-                }
-                Direction::Right => {
-                    if nx == 19 {
-                        self.dead = true;
-                    } else {
-                        nx += 1;
-                    }
-                }
-            }
-            if !self.dead {
-                // crash with snake
-                if self.snake_vec.contains(&(nx, ny)) {
-                    self.dead = true;
+                if ball_pos.1 == 0 {
+                    self.ball_direction.1 *= -1.0;
                 }
 
-                self.snake_vec.insert(0, (nx, ny));
-
-                // if snake eats rat, then don't pop last element
-                if self.rat_pos == (nx, ny) {
-                    self.dinner = true;
-                    self.points += 1;
-                    // create new random rat away from the snake
-                    let mut rng = rand::rng();
-                    loop {
-                        let rx = rng.random_range(0..20);
-                        let ry = rng.random_range(0..20);
-                        if self.snake_vec.contains(&(rx, ry)) {
-                            // continue loop
-                            continue;
+                // left and right if bounce from paddle else dead
+                if ball_pos.0 == 19 {
+                    if self.paddle_2.contains(&ball_pos) {
+                        // TODO: to avoid second move in the 19 location
+                        self.ball_real_pos.0 = 18.0;
+                        // if the paddle has moved in the last 200 ms, then it is a spin
+                        // and the angle changes
+                        if now.duration_since(self.paddle_2_last_move.1) < Duration::from_millis(200) {
+                            match self.paddle_2_last_move.0 {
+                                Direction::Up => {
+                                    self.ball_direction.0 *= -1.33;
+                                    self.ball_direction.1 *= 0.66;
+                                }
+                                Direction::Down => {
+                                    self.ball_direction.0 *= -0.66;
+                                    self.ball_direction.1 *= 1.33;
+                                }
+                            }
+                        } else {
+                            // standard bounce without spin
+                            self.ball_direction.0 *= -1.0;
                         }
-                        self.rat_pos = (rx, ry);
-                        break;
+                    } else {
+                        self.dead = true;
                     }
-                } else {
-                    self.dinner = false;
-                    // if snake don't eats rat, then pop last element
-                    let _popped = self.snake_vec.pop();
+                }
+                if ball_pos.0 == 0 {
+                    if self.paddle_1.contains(&ball_pos) {
+                        // TODO: to avoid second move in the 0 location
+                        self.ball_real_pos.0 = 1.0;
+                        // if the paddle has moved in the last 200 ms, then it is a spin
+                        // and the angle changes
+                        if now.duration_since(self.paddle_1_last_move.1) < Duration::from_millis(200) {
+                            match self.paddle_1_last_move.0 {
+                                Direction::Up => {
+                                    self.ball_direction.0 *= -1.33;
+                                    self.ball_direction.1 *= 0.66;
+                                }
+                                Direction::Down => {
+                                    self.ball_direction.0 *= -0.66;
+                                    self.ball_direction.1 *= 1.33;
+                                }
+                            }
+                        } else {
+                            // standard bounce without spin
+                            self.ball_direction.0 *= -1.0;
+                        }
+                    } else {
+                        self.dead = true;
+                    }
                 }
             }
-        } */
+        }
     }
 
     fn restart_game(&mut self) {
