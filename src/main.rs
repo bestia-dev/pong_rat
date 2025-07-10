@@ -13,69 +13,89 @@ use ratatui::{
     widgets::{Block, Paragraph},
 };
 
+const WIDTH_LEN: usize = 34;
+const WIDTH_LAST_ELEMENT: usize = WIDTH_LEN - 1;
+const HEIGHT_LEN: usize = 34;
+const HEIGHT_LAST_ELEMENT: usize = HEIGHT_LEN - 1;
+const PADDLE_LEN: usize = 10;
+const PADDLE_LAST_ELEMENT: usize = PADDLE_LEN - 1;
+const MID_WIDTH: usize = WIDTH_LEN / 2;
+
 fn main() -> Result<()> {
     color_eyre::install()?;
     let terminal = ratatui::init();
+
     let app_result = App::default().app_loop(terminal);
+
     ratatui::restore();
     app_result
 }
 
-/// Application state
-struct App {
-    paddle_1: Vec<(usize, usize)>,
-    paddle_2: Vec<(usize, usize)>,
+/// Data inside one game
+struct GameData {
+    paddle_1: [(usize, usize); PADDLE_LEN],
+    paddle_2: [(usize, usize); PADDLE_LEN],
     ball_real_pos: (f32, f32),
     ball_direction: (f32, f32),
-    dead: bool,
     // last_move is used to spin the ball to change the direction
     paddle_1_last_move: (Direction, Instant),
     paddle_2_last_move: (Direction, Instant),
     last_move_ball: std::time::Instant,
+    dead: bool,
+}
+
+/// Application state
+struct App {
+    game_data: GameData,
+    net: [(usize, usize); HEIGHT_LEN],
+    ball_step_millisecond: Duration,
+}
+
+/// Initial app state
+impl Default for GameData {
+    fn default() -> Self {
+        let mut paddle_1: [(usize, usize); PADDLE_LEN] = [(0, 0); PADDLE_LEN];
+        for (i, elem) in paddle_1.iter_mut().enumerate() {
+            *elem = (0, i + 4);
+        }
+
+        let mut paddle_2: [(usize, usize); PADDLE_LEN] = [(0, 0); PADDLE_LEN];
+        for (i, elem) in paddle_2.iter_mut().enumerate() {
+            *elem = (WIDTH_LAST_ELEMENT, i + 4);
+        }
+
+        let mut net: [(usize, usize); HEIGHT_LEN] = [(0, 0); HEIGHT_LEN];
+        for (i, elem) in net.iter_mut().enumerate() {
+            *elem = (MID_WIDTH, i);
+        }
+
+        let ball_real_pos = (5.0, 12.0);
+        let ball_direction = (1.0, 1.0);
+        GameData {
+            paddle_1,
+            paddle_2,
+            ball_real_pos,
+            ball_direction,
+            paddle_1_last_move: (Direction::Up, std::time::Instant::now()),
+            paddle_2_last_move: (Direction::Up, std::time::Instant::now()),
+            last_move_ball: std::time::Instant::now(),
+            dead: false,
+        }
+    }
 }
 
 /// Initial app state
 impl Default for App {
     fn default() -> Self {
-        let paddle_1 = vec![
-            (0, 4),
-            (0, 5),
-            (0, 6),
-            (0, 7),
-            (0, 8),
-            (0, 9),
-            (0, 10),
-            (0, 11),
-            (0, 12),
-            (0, 13),
-            (0, 14),
-            (0, 15),
-        ];
-        let paddle_2 = vec![
-            (19, 4),
-            (19, 5),
-            (19, 6),
-            (19, 7),
-            (19, 8),
-            (19, 9),
-            (19, 10),
-            (19, 11),
-            (19, 12),
-            (19, 13),
-            (19, 14),
-            (19, 15),
-        ];
-        let ball_real_pos = (5.0, 12.0);
-        let ball_direction = (1.0, 1.0);
+        let mut net: [(usize, usize); HEIGHT_LEN] = [(0, 0); HEIGHT_LEN];
+        for (i, elem) in net.iter_mut().enumerate() {
+            *elem = (MID_WIDTH, i);
+        }
+
         App {
-            paddle_1,
-            paddle_2,
-            ball_real_pos,
-            ball_direction,
-            dead: false,
-            paddle_1_last_move: (Direction::Up, std::time::Instant::now()),
-            paddle_2_last_move: (Direction::Up, std::time::Instant::now()),
-            last_move_ball: std::time::Instant::now(),
+            game_data: GameData::default(),
+            net,
+            ball_step_millisecond: Duration::from_millis(200),
         }
     }
 }
@@ -114,6 +134,8 @@ impl App {
                             KeyCode::Char('i') => self.move_paddle(Direction::Up, Player::Two),
                             KeyCode::Char('k') => self.move_paddle(Direction::Down, Player::Two),
 
+                            KeyCode::Char('9') => self.ball_speed(Direction::Down),
+                            KeyCode::Char('0') => self.ball_speed(Direction::Up),
                             _ => {}
                         }
                     }
@@ -129,28 +151,35 @@ impl App {
     fn draw(&self, frame: &mut Frame) {
         let frame_area = frame.area();
 
-        let horizontal = Layout::horizontal([Constraint::Length(62), Constraint::Fill(1)]);
+        // add 2 for the block border
+        let horizontal = Layout::horizontal([Constraint::Length((WIDTH_LEN as u16) * 3 + 2), Constraint::Fill(1)]);
         let [content_area, _extra_horizontal_area] = horizontal.areas(frame_area);
 
         let vertical = Layout::vertical([
-            Constraint::Length(22),
+            // add 2 for the block border
+            Constraint::Length(HEIGHT_LEN as u16 + 2),
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Fill(1),
         ]);
-        let [game_area, instructions_area, dead_area, debug_area, _extra_vertical_ares] = vertical.areas(content_area);
-        let ball_pos = (self.ball_real_pos.0.round() as usize, self.ball_real_pos.1.round() as usize);
+        let [game_area, instructions_area, dead_area, _debug_area, _extra_vertical_ares] = vertical.areas(content_area);
+        let ball_pos = (
+            self.game_data.ball_real_pos.0.round() as usize,
+            self.game_data.ball_real_pos.1.round() as usize,
+        );
         let mut text = Text::default();
-        for y in 0..20 {
+        for y in 0..HEIGHT_LEN {
             let mut line = Line::default();
-            for x in 0..20 {
+            for x in 0..WIDTH_LEN {
                 if (x, y) == ball_pos {
                     line.push_span("bal");
-                } else if self.paddle_1.contains(&(x, y)) {
+                } else if x == 0 && self.game_data.paddle_1.contains(&(x, y)) {
                     line.push_span("111");
-                } else if self.paddle_2.contains(&(x, y)) {
+                } else if x == WIDTH_LAST_ELEMENT && self.game_data.paddle_2.contains(&(x, y)) {
                     line.push_span("222");
+                } else if x == MID_WIDTH && self.net.contains(&(x, y)) {
+                    line.push_span(" | ");
                 } else {
                     line.push_span("   ");
                 }
@@ -173,29 +202,36 @@ impl App {
         let paragraph = Paragraph::new("Press Q to quit");
         frame.render_widget(paragraph, exit_area);
 
-        if self.dead {
+        if self.game_data.dead {
             let paragraph = Paragraph::new("The ball is out! Press N to restart.");
             frame.render_widget(paragraph, dead_area);
         }
 
-        let paragraph = Paragraph::new(format!("direction: {}  {}", self.ball_direction.0, self.ball_direction.1));
-        frame.render_widget(paragraph, debug_area);
+        //let paragraph = Paragraph::new(format!("direction: {}  {}", self.game_data.ball_direction.0, self.ball_direction.1));
+        //frame.render_widget(paragraph, debug_area);
+    }
+
+    fn ball_speed(&mut self, direction: Direction) {
+        match direction {
+            Direction::Down => self.ball_step_millisecond = self.ball_step_millisecond.checked_sub(Duration::from_millis(20)).unwrap(),
+            Direction::Up => self.ball_step_millisecond = self.ball_step_millisecond.checked_add(Duration::from_millis(20)).unwrap(),
+        }
     }
 
     fn move_paddle(&mut self, direction: Direction, player: Player) {
         let paddle = match &player {
-            Player::One => &mut self.paddle_1,
-            Player::Two => &mut self.paddle_2,
+            Player::One => &mut self.game_data.paddle_1,
+            Player::Two => &mut self.game_data.paddle_2,
         };
         let paddle_last_move = match player {
-            Player::One => &mut self.paddle_1_last_move,
-            Player::Two => &mut self.paddle_2_last_move,
+            Player::One => &mut self.game_data.paddle_1_last_move,
+            Player::Two => &mut self.game_data.paddle_2_last_move,
         };
         match direction {
             Direction::Down => {
-                if paddle[2].1 < 19 {
-                    for i in 0..paddle.len() {
-                        paddle[i].1 += 1;
+                if paddle[PADDLE_LAST_ELEMENT].1 < HEIGHT_LAST_ELEMENT {
+                    for elem in paddle.iter_mut() {
+                        elem.1 += 1;
                     }
                     paddle_last_move.0 = Direction::Down;
                     paddle_last_move.1 = std::time::Instant::now();
@@ -203,8 +239,8 @@ impl App {
             }
             Direction::Up => {
                 if paddle[0].1 > 0 {
-                    for i in 0..paddle.len() {
-                        paddle[i].1 -= 1;
+                    for elem in paddle.iter_mut() {
+                        elem.1 -= 1;
                     }
                     paddle_last_move.0 = Direction::Up;
                     paddle_last_move.1 = std::time::Instant::now();
@@ -214,73 +250,91 @@ impl App {
     }
 
     fn move_ball(&mut self) {
-        if !self.dead {
-            // move ball every 300 millis
+        if !self.game_data.dead {
+            // move ball every ball_step_millisecond
             let now = std::time::Instant::now();
-            if now.duration_since(self.last_move_ball) > Duration::from_millis(300) {
-                self.last_move_ball = now;
+            if now.duration_since(self.game_data.last_move_ball) > self.ball_step_millisecond {
+                self.game_data.last_move_ball = now;
 
-                self.ball_real_pos.0 += self.ball_direction.0;
-                self.ball_real_pos.1 += self.ball_direction.1;
-                let ball_pos = (self.ball_real_pos.0.round() as usize, self.ball_real_pos.1.round() as usize);
+                self.game_data.ball_real_pos.0 += self.game_data.ball_direction.0;
+                self.game_data.ball_real_pos.1 += self.game_data.ball_direction.1;
+                let ball_pos = (
+                    self.game_data.ball_real_pos.0.round() as usize,
+                    self.game_data.ball_real_pos.1.round() as usize,
+                );
 
                 // bottom and top have the same bounce angle
-                if ball_pos.1 == 19 {
-                    self.ball_direction.1 *= -1.0;
+                if ball_pos.1 == HEIGHT_LAST_ELEMENT {
+                    self.game_data.ball_direction.1 *= -1.0;
                 }
                 if ball_pos.1 == 0 {
-                    self.ball_direction.1 *= -1.0;
+                    self.game_data.ball_direction.1 *= -1.0;
                 }
 
                 // left and right if bounce from paddle else dead
-                if ball_pos.0 == 19 {
-                    if self.paddle_2.contains(&ball_pos) {
-                        // TODO: to avoid second move in the 19 location
-                        self.ball_real_pos.0 = 18.0;
+                if ball_pos.0 == WIDTH_LAST_ELEMENT {
+                    if self.game_data.paddle_2.contains(&ball_pos) {
+                        // Force move it out of the paddle. The next x move can be less then 1
+                        // and this means the ball would be inside the paddle again. That is not good.
+                        self.game_data.ball_real_pos.0 = WIDTH_LAST_ELEMENT as f32 - 1.0;
                         // if the paddle has moved in the last 200 ms, then it is a spin
                         // and the angle changes
-                        if now.duration_since(self.paddle_2_last_move.1) < Duration::from_millis(200) {
-                            match self.paddle_2_last_move.0 {
+                        if now.duration_since(self.game_data.paddle_2_last_move.1) < Duration::from_millis(200) {
+                            match self.game_data.paddle_2_last_move.0 {
                                 Direction::Up => {
-                                    self.ball_direction.0 *= -1.33;
-                                    self.ball_direction.1 *= 0.66;
+                                    self.game_data.ball_direction.0 *= -1.2;
+                                    self.game_data.ball_direction.1 *= 0.8;
                                 }
                                 Direction::Down => {
-                                    self.ball_direction.0 *= -0.66;
-                                    self.ball_direction.1 *= 1.33;
+                                    self.game_data.ball_direction.0 *= -0.8;
+                                    self.game_data.ball_direction.1 *= 1.2;
                                 }
                             }
                         } else {
                             // standard bounce without spin
-                            self.ball_direction.0 *= -1.0;
+                            self.game_data.ball_direction.0 *= -1.0;
                         }
                     } else {
-                        self.dead = true;
+                        self.game_data.dead = true;
                     }
                 }
                 if ball_pos.0 == 0 {
-                    if self.paddle_1.contains(&ball_pos) {
-                        // TODO: to avoid second move in the 0 location
-                        self.ball_real_pos.0 = 1.0;
+                    if self.game_data.paddle_1.contains(&ball_pos) {
+                        // Force move it out of the paddle. The next x move can be less then 1
+                        // and this means the ball would be inside the paddle again. That is not good.
+                        self.game_data.ball_real_pos.0 = 1.0;
                         // if the paddle has moved in the last 200 ms, then it is a spin
                         // and the angle changes
-                        if now.duration_since(self.paddle_1_last_move.1) < Duration::from_millis(200) {
-                            match self.paddle_1_last_move.0 {
+                        if now.duration_since(self.game_data.paddle_1_last_move.1) < Duration::from_millis(200) {
+                            match self.game_data.paddle_1_last_move.0 {
                                 Direction::Up => {
-                                    self.ball_direction.0 *= -1.33;
-                                    self.ball_direction.1 *= 0.66;
+                                    self.game_data.ball_direction.0 *= -1.2;
+                                    self.game_data.ball_direction.1 *= 0.8;
                                 }
                                 Direction::Down => {
-                                    self.ball_direction.0 *= -0.66;
-                                    self.ball_direction.1 *= 1.33;
+                                    self.game_data.ball_direction.0 *= -0.8;
+                                    self.game_data.ball_direction.1 *= 1.2;
                                 }
+                            }
+                            // Limit to min and max angle for direction
+                            if self.game_data.ball_direction.0.abs() > 1.8 {
+                                self.game_data.ball_direction.0 = self.game_data.ball_direction.0.signum() * 1.8;
+                            }
+                            if self.game_data.ball_direction.0 < 0.3 {
+                                self.game_data.ball_direction.0 = self.game_data.ball_direction.0.signum() * 0.3;
+                            }
+                            if self.game_data.ball_direction.1 > 1.8 {
+                                self.game_data.ball_direction.1 = self.game_data.ball_direction.1.signum() * 1.8;
+                            }
+                            if self.game_data.ball_direction.1 < 0.3 {
+                                self.game_data.ball_direction.1 = self.game_data.ball_direction.1.signum() * 0.3;
                             }
                         } else {
                             // standard bounce without spin
-                            self.ball_direction.0 *= -1.0;
+                            self.game_data.ball_direction.0 *= -1.0;
                         }
                     } else {
-                        self.dead = true;
+                        self.game_data.dead = true;
                     }
                 }
             }
@@ -288,6 +342,6 @@ impl App {
     }
 
     fn restart_game(&mut self) {
-        *self = Self::default();
+        self.game_data = GameData::default();
     }
 }

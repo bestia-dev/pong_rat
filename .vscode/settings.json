@@ -46,11 +46,13 @@
         "rustlang",
         "rustprojects",
         "serde",
+        "signum",
         "sshadd",
         "struct",
         "subsecond",
         "substack",
         "thiserror",
+        "xset",
         "zcvf",
         "zdravje",
         "Zeroize"
