@@ -13,9 +13,9 @@ use ratatui::{
     widgets::{Block, Paragraph},
 };
 
-const WIDTH_LEN: usize = 34;
+const WIDTH_LEN: usize = 90;
 const WIDTH_LAST_ELEMENT: usize = WIDTH_LEN - 1;
-const HEIGHT_LEN: usize = 34;
+const HEIGHT_LEN: usize = 26;
 const HEIGHT_LAST_ELEMENT: usize = HEIGHT_LEN - 1;
 const PADDLE_LEN_INIT: usize = 10;
 const MID_WIDTH: usize = WIDTH_LEN / 2;
@@ -71,7 +71,7 @@ impl GameData {
             *elem = (MID_WIDTH, i);
         }
 
-        let ball_real_pos = (5.0, 12.0);
+        let ball_real_pos = (WIDTH_LEN as f32 / 2.0, HEIGHT_LEN as f32 / 2.0);
         let ball_direction = (1.0, 1.0);
         GameData {
             paddle_1,
@@ -160,7 +160,7 @@ impl App {
         let frame_area = frame.area();
 
         // add 2 for the block border
-        let horizontal = Layout::horizontal([Constraint::Length((WIDTH_LEN as u16) * 3 + 2), Constraint::Fill(1)]);
+        let horizontal = Layout::horizontal([Constraint::Length((WIDTH_LEN as u16) + 2), Constraint::Fill(1)]);
         let [content_area, _extra_horizontal_area] = horizontal.areas(frame_area);
 
         let vertical = Layout::vertical([
@@ -189,15 +189,15 @@ impl App {
             let mut line = Line::default();
             for x in 0..WIDTH_LEN {
                 if (x, y) == ball_pos {
-                    line.push_span("bal");
+                    line.push_span("0");
                 } else if x == 0 && self.game_data.paddle_1.contains(&(x, y)) {
-                    line.push_span("111");
+                    line.push_span("1");
                 } else if x == WIDTH_LAST_ELEMENT && self.game_data.paddle_2.contains(&(x, y)) {
-                    line.push_span("222");
+                    line.push_span("2");
                 } else if x == MID_WIDTH && self.net.contains(&(x, y)) {
-                    line.push_span(" | ");
+                    line.push_span("|");
                 } else {
-                    line.push_span("   ");
+                    line.push_span(" ");
                 }
             }
             text.push_line(line);
