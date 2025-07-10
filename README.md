@@ -6,7 +6,7 @@
 [//]: # (auto_cargo_toml_to_md start)
 
 **A simple Pong game with Ratatui**  
-***version: 0.0.103 date: 2025-07-10 author: [bestia.dev](https://bestia.dev) repository: [GitHub](https://github.com/bestia-dev/pong_rat)***
+***version: 0.0.112 date: 2025-07-10 author: [bestia.dev](https://bestia.dev) repository: [GitHub](https://github.com/bestia-dev/pong_rat)***
 
  ![maintained](https://img.shields.io/badge/maintained-green)
  ![work-in-progress](https://img.shields.io/badge/work_in_progress-yellow)
@@ -18,9 +18,9 @@
   [![Rust](https://github.com/bestia-dev/pong_rat/workflows/rust_fmt_auto_build_test/badge.svg)](https://github.com/bestia-dev/pong_rat/)
 
 [//]: # (auto_lines_of_code start)
-[![Lines in Rust code](https://img.shields.io/badge/Lines_in_Rust-318-green.svg)](https://github.com/bestia-dev/pong_rat/)
+[![Lines in Rust code](https://img.shields.io/badge/Lines_in_Rust-364-green.svg)](https://github.com/bestia-dev/pong_rat/)
 [![Lines in Doc comments](https://img.shields.io/badge/Lines_in_Doc_comments-6-blue.svg)](https://github.com/bestia-dev/pong_rat/)
-[![Lines in Comments](https://img.shields.io/badge/Lines_in_comments-23-purple.svg)](https://github.com/bestia-dev/pong_rat/)
+[![Lines in Comments](https://img.shields.io/badge/Lines_in_comments-24-purple.svg)](https://github.com/bestia-dev/pong_rat/)
 [![Lines in examples](https://img.shields.io/badge/Lines_in_examples-0-yellow.svg)](https://github.com/bestia-dev/pong_rat/)
 [![Lines in tests](https://img.shields.io/badge/Lines_in_tests-0-orange.svg)](https://github.com/bestia-dev/pong_rat/)
 

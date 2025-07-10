@@ -17,15 +17,14 @@ const WIDTH_LEN: usize = 34;
 const WIDTH_LAST_ELEMENT: usize = WIDTH_LEN - 1;
 const HEIGHT_LEN: usize = 34;
 const HEIGHT_LAST_ELEMENT: usize = HEIGHT_LEN - 1;
-const PADDLE_LEN: usize = 10;
-const PADDLE_LAST_ELEMENT: usize = PADDLE_LEN - 1;
+const PADDLE_LEN_INIT: usize = 10;
 const MID_WIDTH: usize = WIDTH_LEN / 2;
 
 fn main() -> Result<()> {
     color_eyre::install()?;
     let terminal = ratatui::init();
 
-    let app_result = App::default().app_loop(terminal);
+    let app_result = App::init().app_loop(terminal);
 
     ratatui::restore();
     app_result
@@ -33,8 +32,8 @@ fn main() -> Result<()> {
 
 /// Data inside one game
 struct GameData {
-    paddle_1: [(usize, usize); PADDLE_LEN],
-    paddle_2: [(usize, usize); PADDLE_LEN],
+    paddle_1: Vec<(usize, usize)>,
+    paddle_2: Vec<(usize, usize)>,
     ball_real_pos: (f32, f32),
     ball_direction: (f32, f32),
     // last_move is used to spin the ball to change the direction
@@ -49,19 +48,22 @@ struct App {
     game_data: GameData,
     net: [(usize, usize); HEIGHT_LEN],
     ball_step_millisecond: Duration,
+    paddle_len: usize,
+    player_1_points: u32,
+    player_2_points: u32,
 }
 
-/// Initial app state
-impl Default for GameData {
-    fn default() -> Self {
-        let mut paddle_1: [(usize, usize); PADDLE_LEN] = [(0, 0); PADDLE_LEN];
-        for (i, elem) in paddle_1.iter_mut().enumerate() {
-            *elem = (0, i + 4);
+/// Initial state for every game
+impl GameData {
+    fn init(paddle_len: usize) -> Self {
+        let mut paddle_1 = vec![];
+        for i in 0..paddle_len {
+            paddle_1.push((0, i + 4));
         }
 
-        let mut paddle_2: [(usize, usize); PADDLE_LEN] = [(0, 0); PADDLE_LEN];
-        for (i, elem) in paddle_2.iter_mut().enumerate() {
-            *elem = (WIDTH_LAST_ELEMENT, i + 4);
+        let mut paddle_2 = vec![];
+        for i in 0..paddle_len {
+            paddle_2.push((WIDTH_LAST_ELEMENT, i + 4));
         }
 
         let mut net: [(usize, usize); HEIGHT_LEN] = [(0, 0); HEIGHT_LEN];
@@ -85,17 +87,20 @@ impl Default for GameData {
 }
 
 /// Initial app state
-impl Default for App {
-    fn default() -> Self {
+impl App {
+    fn init() -> Self {
         let mut net: [(usize, usize); HEIGHT_LEN] = [(0, 0); HEIGHT_LEN];
         for (i, elem) in net.iter_mut().enumerate() {
             *elem = (MID_WIDTH, i);
         }
-
+        let paddle_len = PADDLE_LEN_INIT;
         App {
-            game_data: GameData::default(),
+            game_data: GameData::init(paddle_len),
             net,
             ball_step_millisecond: Duration::from_millis(200),
+            paddle_len,
+            player_1_points: 0,
+            player_2_points: 0,
         }
     }
 }
@@ -136,6 +141,9 @@ impl App {
 
                             KeyCode::Char('9') => self.ball_speed(Direction::Down),
                             KeyCode::Char('0') => self.ball_speed(Direction::Up),
+
+                            KeyCode::Char('1') => self.paddle_length(Direction::Down),
+                            KeyCode::Char('2') => self.paddle_length(Direction::Up),
                             _ => {}
                         }
                     }
@@ -161,9 +169,17 @@ impl App {
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
+            Constraint::Length(1),
             Constraint::Fill(1),
         ]);
-        let [game_area, instructions_area, dead_area, _debug_area, _extra_vertical_ares] = vertical.areas(content_area);
+        let [
+            game_area,
+            points_area,
+            instructions_area,
+            dead_area,
+            _debug_area,
+            _extra_vertical_ares,
+        ] = vertical.areas(content_area);
         let ball_pos = (
             self.game_data.ball_real_pos.0.round() as usize,
             self.game_data.ball_real_pos.1.round() as usize,
@@ -191,21 +207,24 @@ impl App {
         frame.render_widget(game_content, game_area);
 
         let horizontal_instructions = Layout::horizontal([Constraint::Ratio(1, 3), Constraint::Ratio(1, 3), Constraint::Ratio(1, 3)]);
-        let [time_area, points_area, exit_area] = horizontal_instructions.areas(instructions_area);
+        let [instr_left_area, instr_center_area, instr_right_area] = horizontal_instructions.areas(instructions_area);
 
-        let paragraph = Paragraph::new("W-up, S-down");
-        frame.render_widget(paragraph, time_area);
+        let paragraph = Paragraph::new("1-smaller, 2-larger, 9-slower, 0-faster");
+        frame.render_widget(paragraph, instr_left_area);
 
-        let paragraph = Paragraph::new("I-up, K-down");
-        frame.render_widget(paragraph, points_area);
+        let paragraph = Paragraph::new("W-up, S-down, I-up, K-down").centered();
+        frame.render_widget(paragraph, instr_center_area);
 
-        let paragraph = Paragraph::new("Press Q to quit");
-        frame.render_widget(paragraph, exit_area);
+        let paragraph = Paragraph::new("Press Q to quit").right_aligned();
+        frame.render_widget(paragraph, instr_right_area);
 
         if self.game_data.dead {
             let paragraph = Paragraph::new("The ball is out! Press N to restart.");
             frame.render_widget(paragraph, dead_area);
         }
+
+        let paragraph = Paragraph::new(format!("{} : {}", self.player_1_points, self.player_2_points)).centered();
+        frame.render_widget(paragraph, points_area);
 
         //let paragraph = Paragraph::new(format!("direction: {}  {}", self.game_data.ball_direction.0, self.ball_direction.1));
         //frame.render_widget(paragraph, debug_area);
@@ -213,8 +232,29 @@ impl App {
 
     fn ball_speed(&mut self, direction: Direction) {
         match direction {
-            Direction::Down => self.ball_step_millisecond = self.ball_step_millisecond.checked_sub(Duration::from_millis(20)).unwrap(),
-            Direction::Up => self.ball_step_millisecond = self.ball_step_millisecond.checked_add(Duration::from_millis(20)).unwrap(),
+            Direction::Up => self.ball_step_millisecond = self.ball_step_millisecond.checked_sub(Duration::from_millis(20)).unwrap(),
+            Direction::Down => self.ball_step_millisecond = self.ball_step_millisecond.checked_add(Duration::from_millis(20)).unwrap(),
+        }
+    }
+
+    fn paddle_length(&mut self, direction: Direction) {
+        match direction {
+            Direction::Up => {
+                self.paddle_len += 1;
+                self.game_data.paddle_1.push((
+                    self.game_data.paddle_1.last().unwrap().0,
+                    self.game_data.paddle_1.last().unwrap().1 + 1,
+                ));
+                self.game_data.paddle_2.push((
+                    self.game_data.paddle_2.last().unwrap().0,
+                    self.game_data.paddle_2.last().unwrap().1 + 1,
+                ));
+            }
+            Direction::Down => {
+                self.paddle_len -= 1;
+                self.game_data.paddle_1.pop().unwrap();
+                self.game_data.paddle_2.pop().unwrap();
+            }
         }
     }
 
@@ -229,7 +269,7 @@ impl App {
         };
         match direction {
             Direction::Down => {
-                if paddle[PADDLE_LAST_ELEMENT].1 < HEIGHT_LAST_ELEMENT {
+                if paddle[self.paddle_len - 1].1 < HEIGHT_LAST_ELEMENT {
                     for elem in paddle.iter_mut() {
                         elem.1 += 1;
                     }
@@ -295,6 +335,7 @@ impl App {
                             self.game_data.ball_direction.0 *= -1.0;
                         }
                     } else {
+                        self.player_1_points += 1;
                         self.game_data.dead = true;
                     }
                 }
@@ -334,6 +375,7 @@ impl App {
                             self.game_data.ball_direction.0 *= -1.0;
                         }
                     } else {
+                        self.player_2_points += 1;
                         self.game_data.dead = true;
                     }
                 }
@@ -342,6 +384,11 @@ impl App {
     }
 
     fn restart_game(&mut self) {
-        self.game_data = GameData::default();
+        // leave paddle in the same position
+        let paddle_1 = self.game_data.paddle_1.clone();
+        let paddle_2 = self.game_data.paddle_2.clone();
+        self.game_data = GameData::init(self.paddle_len);
+        self.game_data.paddle_1 = paddle_1;
+        self.game_data.paddle_2 = paddle_2;
     }
 }
