@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Direction"],"fn":["main"],"struct":["App"]};
+window.SIDEBAR_ITEMS = {"constant":["HEIGHT_LAST_ELEMENT","HEIGHT_LEN","MID_WIDTH","PADDLE_LEN_INIT","WIDTH_LAST_ELEMENT","WIDTH_LEN"],"enum":["Direction","Player"],"fn":["main"],"struct":["App","GameData"]};
