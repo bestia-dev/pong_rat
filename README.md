@@ -6,7 +6,7 @@
 [//]: # (auto_cargo_toml_to_md start)
 
 **A simple Pong game with Ratatui**  
-***version: 0.0.117 date: 2025-07-11 author: [bestia.dev](https://bestia.dev) repository: [GitHub](https://github.com/bestia-dev/pong_rat)***
+***version: 0.0.118 date: 2025-07-12 author: [bestia.dev](https://bestia.dev) repository: [GitHub](https://github.com/bestia-dev/pong_rat)***
 
  ![maintained](https://img.shields.io/badge/maintained-green)
  ![work-in-progress](https://img.shields.io/badge/work_in_progress-yellow)
@@ -19,7 +19,7 @@
   ![https://github.com/bestia-dev/pong_rat](https://bestia.dev/webpage_hit_counter/get_svg_image/1635942782.svg)
 
 [//]: # (auto_lines_of_code start)
-[![Lines in Rust code](https://img.shields.io/badge/Lines_in_Rust-364-green.svg)](https://github.com/bestia-dev/pong_rat/)
+[![Lines in Rust code](https://img.shields.io/badge/Lines_in_Rust-365-green.svg)](https://github.com/bestia-dev/pong_rat/)
 [![Lines in Doc comments](https://img.shields.io/badge/Lines_in_Doc_comments-6-blue.svg)](https://github.com/bestia-dev/pong_rat/)
 [![Lines in Comments](https://img.shields.io/badge/Lines_in_comments-24-purple.svg)](https://github.com/bestia-dev/pong_rat/)
 [![Lines in examples](https://img.shields.io/badge/Lines_in_examples-0-yellow.svg)](https://github.com/bestia-dev/pong_rat/)
@@ -35,7 +35,8 @@ I recommend using the [CRUSTDE - Containerized Rust Development Environment](htt
 
 Everybody knows this game.
 
-Ratatui is a Rust library for TUI user interface in the Terminal.
+Ratatui is a Rust library for TUI user interface in the Terminal.  
+Terminal characters are not squares. It looks better if one sprite has 2 characters.
 
 ## Development details
 
