@@ -31,15 +31,31 @@ fn main() -> Result<()> {
     app_result
 }
 
+#[derive(PartialEq, Clone)]
+struct IPos {
+    x: usize,
+    y: usize,
+}
+
+struct FPos {
+    x: f32,
+    y: f32,
+}
+
+struct LastMove {
+    direction: Direction,
+    instant: Instant,
+}
+
 /// Data inside one game
 struct GameData {
-    paddle_1: Vec<(usize, usize)>,
-    paddle_2: Vec<(usize, usize)>,
-    ball_real_pos: (f32, f32),
-    ball_direction: (f32, f32),
+    paddle_left: Vec<IPos>,
+    paddle_right: Vec<IPos>,
+    ball_real_pos: FPos,
+    ball_direction: FPos,
     // last_move is used to spin the ball to change the direction
-    paddle_1_last_move: (Direction, Instant),
-    paddle_2_last_move: (Direction, Instant),
+    paddle_left_last_move: LastMove,
+    paddle_right_last_move: LastMove,
     last_move_ball: std::time::Instant,
     dead: bool,
 }
@@ -50,21 +66,25 @@ struct App {
     net: [(usize, usize); HEIGHT_LEN],
     ball_step_millisecond: Duration,
     paddle_len: usize,
-    player_1_points: u32,
-    player_2_points: u32,
+    player_left_points: u32,
+    player_right_points: u32,
 }
 
 /// Initial state for every game
 impl GameData {
     fn init(paddle_len: usize) -> Self {
-        let mut paddle_1 = vec![];
+        let mut paddle_left = vec![];
+        let x = 0;
         for i in 0..paddle_len {
-            paddle_1.push((0, i + 4));
+            let y = i + 4;
+            paddle_left.push(IPos { x, y });
         }
 
-        let mut paddle_2 = vec![];
+        let mut paddle_right = vec![];
+        let x = WIDTH_LAST_ELEMENT;
         for i in 0..paddle_len {
-            paddle_2.push((WIDTH_LAST_ELEMENT, i + 4));
+            let y = i + 4;
+            paddle_right.push(IPos { x, y });
         }
 
         let mut net: [(usize, usize); HEIGHT_LEN] = [(0, 0); HEIGHT_LEN];
@@ -72,15 +92,24 @@ impl GameData {
             *elem = (MID_WIDTH, i);
         }
 
-        let ball_real_pos = (WIDTH_LEN as f32 / 2.0, HEIGHT_LEN as f32 / 2.0);
-        let ball_direction = (1.0, 1.0);
+        let ball_real_pos = FPos {
+            x: WIDTH_LEN as f32 / 2.0,
+            y: HEIGHT_LEN as f32 / 2.0,
+        };
+        let ball_direction = FPos { x: 1.0, y: 1.0 };
         GameData {
-            paddle_1,
-            paddle_2,
+            paddle_left,
+            paddle_right,
             ball_real_pos,
             ball_direction,
-            paddle_1_last_move: (Direction::Up, std::time::Instant::now()),
-            paddle_2_last_move: (Direction::Up, std::time::Instant::now()),
+            paddle_left_last_move: LastMove {
+                direction: Direction::Up,
+                instant: std::time::Instant::now(),
+            },
+            paddle_right_last_move: LastMove {
+                direction: Direction::Up,
+                instant: std::time::Instant::now(),
+            },
             last_move_ball: std::time::Instant::now(),
             dead: false,
         }
@@ -100,8 +129,8 @@ impl App {
             net,
             ball_step_millisecond: Duration::from_millis(200),
             paddle_len,
-            player_1_points: 0,
-            player_2_points: 0,
+            player_left_points: 0,
+            player_right_points: 0,
         }
     }
 }
@@ -181,20 +210,21 @@ impl App {
             _debug_area,
             _extra_vertical_ares,
         ] = vertical.areas(content_area);
-        let ball_pos = (
-            self.game_data.ball_real_pos.0.round() as usize,
-            self.game_data.ball_real_pos.1.round() as usize,
-        );
+
+        let ball_pos = IPos {
+            x: self.game_data.ball_real_pos.x.round() as usize,
+            y: self.game_data.ball_real_pos.y.round() as usize,
+        };
         let mut text = Text::default();
         for y in 0..HEIGHT_LEN {
             let mut line = Line::default();
             for x in 0..WIDTH_LEN {
-                if (x, y) == ball_pos {
-                    line.push_span("00");
-                } else if x == 0 && self.game_data.paddle_1.contains(&(x, y)) {
-                    line.push_span("11");
-                } else if x == WIDTH_LAST_ELEMENT && self.game_data.paddle_2.contains(&(x, y)) {
-                    line.push_span("22");
+                if (IPos { x, y }) == ball_pos {
+                    line.push_span("██");
+                } else if x == 0 && self.game_data.paddle_left.contains(&IPos { x, y }) {
+                    line.push_span(" █");
+                } else if x == WIDTH_LAST_ELEMENT && self.game_data.paddle_right.contains(&IPos { x, y }) {
+                    line.push_span("█ ");
                 } else if x == MID_WIDTH && self.net.contains(&(x, y)) {
                     line.push_span("| ");
                 } else {
@@ -224,10 +254,10 @@ impl App {
             frame.render_widget(paragraph, dead_area);
         }
 
-        let paragraph = Paragraph::new(format!("{} : {}", self.player_1_points, self.player_2_points)).centered();
+        let paragraph = Paragraph::new(format!("{} : {}", self.player_left_points, self.player_right_points)).centered();
         frame.render_widget(paragraph, points_area);
 
-        //let paragraph = Paragraph::new(format!("direction: {}  {}", self.game_data.ball_direction.0, self.ball_direction.1));
+        //let paragraph = Paragraph::new(format!("direction: {}  {}", self.game_data.ball_direction.x, self.ball_direction.y));
         //frame.render_widget(paragraph, debug_area);
     }
 
@@ -242,49 +272,46 @@ impl App {
         match direction {
             Direction::Up => {
                 self.paddle_len += 1;
-                self.game_data.paddle_1.push((
-                    self.game_data.paddle_1.last().unwrap().0,
-                    self.game_data.paddle_1.last().unwrap().1 + 1,
-                ));
-                self.game_data.paddle_2.push((
-                    self.game_data.paddle_2.last().unwrap().0,
-                    self.game_data.paddle_2.last().unwrap().1 + 1,
-                ));
+                let x = self.game_data.paddle_left.last().unwrap().x;
+                let y = self.game_data.paddle_left.last().unwrap().y + 1;
+                self.game_data.paddle_left.push(IPos { x, y });
+                let x = self.game_data.paddle_right.last().unwrap().x;
+                let y = self.game_data.paddle_right.last().unwrap().y + 1;
+                self.game_data.paddle_right.push(IPos { x, y });
             }
             Direction::Down => {
                 self.paddle_len -= 1;
-                self.game_data.paddle_1.pop().unwrap();
-                self.game_data.paddle_2.pop().unwrap();
+                self.game_data.paddle_left.pop().unwrap();
+                self.game_data.paddle_right.pop().unwrap();
             }
         }
     }
 
     fn move_paddle(&mut self, direction: Direction, player: Player) {
         let paddle = match &player {
-            Player::One => &mut self.game_data.paddle_1,
-            Player::Two => &mut self.game_data.paddle_2,
+            Player::One => &mut self.game_data.paddle_left,
+            Player::Two => &mut self.game_data.paddle_right,
         };
         let paddle_last_move = match player {
-            Player::One => &mut self.game_data.paddle_1_last_move,
-            Player::Two => &mut self.game_data.paddle_2_last_move,
+            Player::One => &mut self.game_data.paddle_left_last_move,
+            Player::Two => &mut self.game_data.paddle_right_last_move,
         };
+        paddle_last_move.instant = std::time::Instant::now();
         match direction {
             Direction::Down => {
-                if paddle[self.paddle_len - 1].1 < HEIGHT_LAST_ELEMENT {
+                paddle_last_move.direction = Direction::Down;
+                if paddle[self.paddle_len - 1].y < HEIGHT_LAST_ELEMENT {
                     for elem in paddle.iter_mut() {
-                        elem.1 += 1;
+                        elem.y += 1;
                     }
-                    paddle_last_move.0 = Direction::Down;
-                    paddle_last_move.1 = std::time::Instant::now();
                 }
             }
             Direction::Up => {
-                if paddle[0].1 > 0 {
+                paddle_last_move.direction = Direction::Up;
+                if paddle[0].y > 0 {
                     for elem in paddle.iter_mut() {
-                        elem.1 -= 1;
+                        elem.y -= 1;
                     }
-                    paddle_last_move.0 = Direction::Up;
-                    paddle_last_move.1 = std::time::Instant::now();
                 }
             }
         }
@@ -297,86 +324,86 @@ impl App {
             if now.duration_since(self.game_data.last_move_ball) > self.ball_step_millisecond {
                 self.game_data.last_move_ball = now;
 
-                self.game_data.ball_real_pos.0 += self.game_data.ball_direction.0;
-                self.game_data.ball_real_pos.1 += self.game_data.ball_direction.1;
-                let ball_pos = (
-                    self.game_data.ball_real_pos.0.round() as usize,
-                    self.game_data.ball_real_pos.1.round() as usize,
-                );
+                self.game_data.ball_real_pos.x += self.game_data.ball_direction.x;
+                self.game_data.ball_real_pos.y += self.game_data.ball_direction.y;
+                let ball_pos = IPos {
+                    x: self.game_data.ball_real_pos.x.round() as usize,
+                    y: self.game_data.ball_real_pos.y.round() as usize,
+                };
 
                 // bottom and top have the same bounce angle
-                if ball_pos.1 == HEIGHT_LAST_ELEMENT {
-                    self.game_data.ball_direction.1 *= -1.0;
+                if ball_pos.y == HEIGHT_LAST_ELEMENT {
+                    self.game_data.ball_direction.y *= -1.0;
                 }
-                if ball_pos.1 == 0 {
-                    self.game_data.ball_direction.1 *= -1.0;
+                if ball_pos.y == 0 {
+                    self.game_data.ball_direction.y *= -1.0;
                 }
 
                 // left and right if bounce from paddle else dead
-                if ball_pos.0 == WIDTH_LAST_ELEMENT {
-                    if self.game_data.paddle_2.contains(&ball_pos) {
+                if ball_pos.x == WIDTH_LAST_ELEMENT {
+                    if self.game_data.paddle_right.contains(&ball_pos) {
                         // Force move it out of the paddle. The next x move can be less then 1
                         // and this means the ball would be inside the paddle again. That is not good.
-                        self.game_data.ball_real_pos.0 = WIDTH_LAST_ELEMENT as f32 - 1.0;
+                        self.game_data.ball_real_pos.x = WIDTH_LAST_ELEMENT as f32 - 1.0;
                         // if the paddle has moved in the last 200 ms, then it is a spin
                         // and the angle changes
-                        if now.duration_since(self.game_data.paddle_2_last_move.1) < Duration::from_millis(200) {
-                            match self.game_data.paddle_2_last_move.0 {
+                        if now.duration_since(self.game_data.paddle_right_last_move.instant) < Duration::from_millis(200) {
+                            match self.game_data.paddle_right_last_move.direction {
                                 Direction::Up => {
-                                    self.game_data.ball_direction.0 *= -1.2;
-                                    self.game_data.ball_direction.1 *= 0.8;
+                                    self.game_data.ball_direction.x *= -1.2;
+                                    self.game_data.ball_direction.y *= 0.8;
                                 }
                                 Direction::Down => {
-                                    self.game_data.ball_direction.0 *= -0.8;
-                                    self.game_data.ball_direction.1 *= 1.2;
+                                    self.game_data.ball_direction.x *= -0.8;
+                                    self.game_data.ball_direction.y *= 1.2;
                                 }
                             }
                         } else {
                             // standard bounce without spin
-                            self.game_data.ball_direction.0 *= -1.0;
+                            self.game_data.ball_direction.x *= -1.0;
                         }
                     } else {
-                        self.player_1_points += 1;
+                        self.player_left_points += 1;
                         self.game_data.dead = true;
                     }
                 }
-                if ball_pos.0 == 0 {
-                    if self.game_data.paddle_1.contains(&ball_pos) {
+                if ball_pos.x == 0 {
+                    if self.game_data.paddle_left.contains(&ball_pos) {
                         // Force move it out of the paddle. The next x move can be less then 1
                         // and this means the ball would be inside the paddle again. That is not good.
-                        self.game_data.ball_real_pos.0 = 1.0;
+                        self.game_data.ball_real_pos.x = 1.0;
                         // if the paddle has moved in the last 200 ms, then it is a spin
                         // and the angle changes
-                        if now.duration_since(self.game_data.paddle_1_last_move.1) < Duration::from_millis(200) {
-                            match self.game_data.paddle_1_last_move.0 {
+                        if now.duration_since(self.game_data.paddle_left_last_move.instant) < Duration::from_millis(200) {
+                            match self.game_data.paddle_left_last_move.direction {
                                 Direction::Up => {
-                                    self.game_data.ball_direction.0 *= -1.2;
-                                    self.game_data.ball_direction.1 *= 0.8;
+                                    self.game_data.ball_direction.x *= -1.2;
+                                    self.game_data.ball_direction.y *= 0.8;
                                 }
                                 Direction::Down => {
-                                    self.game_data.ball_direction.0 *= -0.8;
-                                    self.game_data.ball_direction.1 *= 1.2;
+                                    self.game_data.ball_direction.x *= -0.8;
+                                    self.game_data.ball_direction.y *= 1.2;
                                 }
                             }
                             // Limit to min and max angle for direction
-                            if self.game_data.ball_direction.0.abs() > 1.8 {
-                                self.game_data.ball_direction.0 = self.game_data.ball_direction.0.signum() * 1.8;
+                            if self.game_data.ball_direction.x.abs() > 1.8 {
+                                self.game_data.ball_direction.x = self.game_data.ball_direction.x.signum() * 1.8;
                             }
-                            if self.game_data.ball_direction.0 < 0.3 {
-                                self.game_data.ball_direction.0 = self.game_data.ball_direction.0.signum() * 0.3;
+                            if self.game_data.ball_direction.x < 0.3 {
+                                self.game_data.ball_direction.x = self.game_data.ball_direction.x.signum() * 0.3;
                             }
-                            if self.game_data.ball_direction.1 > 1.8 {
-                                self.game_data.ball_direction.1 = self.game_data.ball_direction.1.signum() * 1.8;
+                            if self.game_data.ball_direction.y > 1.8 {
+                                self.game_data.ball_direction.y = self.game_data.ball_direction.y.signum() * 1.8;
                             }
-                            if self.game_data.ball_direction.1 < 0.3 {
-                                self.game_data.ball_direction.1 = self.game_data.ball_direction.1.signum() * 0.3;
+                            if self.game_data.ball_direction.y < 0.3 {
+                                self.game_data.ball_direction.y = self.game_data.ball_direction.y.signum() * 0.3;
                             }
                         } else {
                             // standard bounce without spin
-                            self.game_data.ball_direction.0 *= -1.0;
+                            self.game_data.ball_direction.x *= -1.0;
                         }
                     } else {
-                        self.player_2_points += 1;
+                        self.player_right_points += 1;
                         self.game_data.dead = true;
                     }
                 }
@@ -386,10 +413,10 @@ impl App {
 
     fn restart_game(&mut self) {
         // leave paddle in the same position
-        let paddle_1 = self.game_data.paddle_1.clone();
-        let paddle_2 = self.game_data.paddle_2.clone();
+        let paddle_1 = self.game_data.paddle_left.clone();
+        let paddle_2 = self.game_data.paddle_right.clone();
         self.game_data = GameData::init(self.paddle_len);
-        self.game_data.paddle_1 = paddle_1;
-        self.game_data.paddle_2 = paddle_2;
+        self.game_data.paddle_left = paddle_1;
+        self.game_data.paddle_right = paddle_2;
     }
 }
