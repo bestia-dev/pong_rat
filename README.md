@@ -16,6 +16,7 @@
 
   [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/bestia-dev/pong_rat/blob/main/LICENSE)
   [![Rust](https://github.com/bestia-dev/pong_rat/workflows/rust_fmt_auto_build_test/badge.svg)](https://github.com/bestia-dev/pong_rat/)
+  ![https://github.com/bestia-dev/pong_rat](https://bestia.dev/webpage_hit_counter/get_svg_image/1635942782.svg)
 
 [//]: # (auto_lines_of_code start)
 [![Lines in Rust code](https://img.shields.io/badge/Lines_in_Rust-364-green.svg)](https://github.com/bestia-dev/pong_rat/)
